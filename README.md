@@ -1,6 +1,6 @@
 # Harmonie's Changelogs
 
-![harmonie-changelogs](https://github.com/harmonie-durrant/harmonie-changelogs/blob/main/docs/title.png?raw=true)
+![harmonie-changelogs](docs/title.png)
 
 Harmonie's Changelogs is a custom Lovelace card for Home Assistant that allows you to display a changelog for your Home Assistant instance. It is designed to be simple and easy to use, and it can be customized to fit your needs. The changelog is stored in an `input_text` entity, which can be updated manually or through automation, and it supports markdown formatting. The changelog popup auto shows the first time after an update, and can be configured to show a button to open it manually... or not.
 
@@ -45,7 +45,7 @@ entity: input_text.changelog
 hide_button: true
 ```
 
-![Changelog card example](docs/examples/changelog.png)
+![Changelog card](docs/title.png)
 
 ```yaml
 type: custom:changelog-card
