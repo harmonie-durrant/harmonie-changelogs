@@ -29,10 +29,9 @@ class $5e992beb3636530b$export$abf9e6a64b1b3473 extends HTMLElement {
         if (this._hass && (!this._hass.states[config.entity] || !this._hass.states[config.entity].entity_id.startsWith('input_text.'))) throw new Error('Entity must be an input_text entity');
         const configChanged = JSON.stringify(this._config) !== JSON.stringify(config);
         this._config = config;
-        if (configChanged) this._createCard(); // Recreate card when config changes
+        if (configChanged) this._createCard();
     }
     _checkShouldAutoOpen() {
-        // Don't show popup if URL ends with ?edit=1
         if (window.location.search.includes('edit=1')) return false;
         if (this._hasAutoOpened || !this._hass || !this._config.entity) return false;
         const state = this._hass.states[this._config.entity];
@@ -52,12 +51,10 @@ class $5e992beb3636530b$export$abf9e6a64b1b3473 extends HTMLElement {
         await this._createCard();
     }
     async _createCard() {
-        // Initialize last viewed time if it doesn't exist
         if (!localStorage.getItem(this._lastViewedKey)) this._updateLastViewed();
         const shadow = this.attachShadow({
             mode: 'open'
         });
-        // Create styles
         const style = document.createElement('style');
         style.textContent = `
             ha-dialog {
@@ -108,15 +105,12 @@ class $5e992beb3636530b$export$abf9e6a64b1b3473 extends HTMLElement {
                 justify-content: flex-end;
             }
         `;
-        // Create content
         const content = document.createElement('div');
         content.innerHTML = `
             <ha-dialog>
-                <div slot="heading">
-                    <div class="heading">
-                        <ha-icon icon="mdi:text-box-plus-outline" class="title-icon"></ha-icon>
-                        <div class="title">Changelog</div>
-                    </div>
+                <div class="heading">
+                    <ha-icon icon="mdi:text-box-plus-outline" class="title-icon"></ha-icon>
+                    <div class="title">Changelog</div>
                 </div>
 
                 <div class="content">
@@ -132,6 +126,7 @@ class $5e992beb3636530b$export$abf9e6a64b1b3473 extends HTMLElement {
         shadow.appendChild(content);
         this._dialog = shadow.querySelector('ha-dialog');
         const button = document.createElement('ha-button');
+        button.className = 'dash-button';
         button.innerText = this._config.button_text || this._defaultButtonText;
         button.addEventListener('click', ()=>this._openDialog());
         button.style.display = this._config.hide_button ? 'none' : '';
@@ -156,15 +151,13 @@ class $5e992beb3636530b$export$abf9e6a64b1b3473 extends HTMLElement {
         const alert = this.shadowRoot?.querySelector('ha-alert');
         if (alert) alert.style.display = 'none';
         const changelogContent = this.shadowRoot?.querySelector('.changelog-content');
-        if (changelogContent) // Convert newlines to <br> tags and display the changelog text
-        changelogContent.innerHTML = state.state ? state.state.replace(/\n/g, '<br>') : '';
-        const button = this.shadowRoot?.querySelector('ha-button');
+        if (changelogContent) changelogContent.innerHTML = state.state ? state.state.replace(/\n/g, '<br>') : '';
+        const button = this.shadowRoot?.querySelector('.dash-button');
         if (button) {
             button.disabled = !state.state;
-            // Update button text and visibility
             button.innerText = this._config.button_text || this._defaultButtonText;
             button.style.display = this._config.hide_button ? 'none' : '';
-        } // Check if we should auto-open the dialog
+        }
         if (!this._hasAutoOpened && this._checkShouldAutoOpen()) {
             this._hasAutoOpened = true;
             this._openDialog();
@@ -174,7 +167,6 @@ class $5e992beb3636530b$export$abf9e6a64b1b3473 extends HTMLElement {
         if (!this._dialog) this._dialog = this.shadowRoot.querySelector('ha-dialog');
         if (this._dialog) {
             this._dialog.open = true;
-            // Update last viewed timestamp when dialog is opened
             this._updateLastViewed();
         }
     }
@@ -252,7 +244,6 @@ class $5e992beb3636530b$export$12f681b7a98048a8 extends HTMLElement {
         if (value === '') delete newConfig[key];
         else newConfig[key] = value;
         this._config = this._reorderConfig(newConfig);
-        // Ensure config change is triggered properly
         this.dispatchEvent(new CustomEvent('config-changed', {
             detail: {
                 config: {

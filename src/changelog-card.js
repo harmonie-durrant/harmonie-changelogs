@@ -39,12 +39,11 @@ export class ChangeLogCard extends HTMLElement {
         this._config = config;
 
         if (configChanged) {
-            this._createCard(); // Recreate card when config changes
+            this._createCard();
         }
     }
 
     _checkShouldAutoOpen() {
-        // Don't show popup if URL ends with ?edit=1
         if (window.location.search.includes('edit=1')) return false;
 
         if (this._hasAutoOpened || !this._hass || !this._config.entity) return false;
@@ -74,14 +73,11 @@ export class ChangeLogCard extends HTMLElement {
     }
 
     async _createCard() {
-        // Initialize last viewed time if it doesn't exist
         if (!localStorage.getItem(this._lastViewedKey)) {
             this._updateLastViewed();
         }
 
         const shadow = this.attachShadow({ mode: 'open' });
-
-        // Create styles
         const style = document.createElement('style');
         style.textContent = `
             ha-dialog {
@@ -132,16 +128,12 @@ export class ChangeLogCard extends HTMLElement {
                 justify-content: flex-end;
             }
         `;
-
-        // Create content
         const content = document.createElement('div');
         content.innerHTML = `
             <ha-dialog>
-                <div slot="heading">
-                    <div class="heading">
-                        <ha-icon icon="mdi:text-box-plus-outline" class="title-icon"></ha-icon>
-                        <div class="title">Changelog</div>
-                    </div>
+                <div class="heading">
+                    <ha-icon icon="mdi:text-box-plus-outline" class="title-icon"></ha-icon>
+                    <div class="title">Changelog</div>
                 </div>
 
                 <div class="content">
@@ -159,6 +151,7 @@ export class ChangeLogCard extends HTMLElement {
 
         this._dialog = shadow.querySelector('ha-dialog');
         const button = document.createElement('ha-button');
+        button.className = 'dash-button';
         button.innerText = this._config.button_text || this._defaultButtonText;
         button.addEventListener('click', () => this._openDialog());
         button.style.display = this._config.hide_button ? 'none' : '';
@@ -192,17 +185,15 @@ export class ChangeLogCard extends HTMLElement {
 
         const changelogContent = this.shadowRoot?.querySelector('.changelog-content');
         if (changelogContent) {
-            // Convert newlines to <br> tags and display the changelog text
             changelogContent.innerHTML = state.state ? state.state.replace(/\n/g, '<br>') : '';
         }
 
-        const button = this.shadowRoot?.querySelector('ha-button');
+        const button = this.shadowRoot?.querySelector('.dash-button');
         if (button) {
             button.disabled = !state.state;
-            // Update button text and visibility
             button.innerText = this._config.button_text || this._defaultButtonText;
             button.style.display = this._config.hide_button ? 'none' : '';
-        }        // Check if we should auto-open the dialog
+        }
         if (!this._hasAutoOpened && this._checkShouldAutoOpen()) {
             this._hasAutoOpened = true;
             this._openDialog();
@@ -215,7 +206,6 @@ export class ChangeLogCard extends HTMLElement {
         }
         if (this._dialog) {
             this._dialog.open = true;
-            // Update last viewed timestamp when dialog is opened
             this._updateLastViewed();
         }
     }
@@ -299,7 +289,6 @@ export class ChangelogCardEditor extends HTMLElement {
         }
         this._config = this._reorderConfig(newConfig);
 
-        // Ensure config change is triggered properly
         this.dispatchEvent(new CustomEvent('config-changed', {
             detail: { config: { ...this._config } },
             bubbles: true,
