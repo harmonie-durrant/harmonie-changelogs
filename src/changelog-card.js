@@ -1,3 +1,5 @@
+import { marked } from 'marked';
+
 export class ChangeLogCard extends HTMLElement {
     static getStubConfig() {
         return { type: 'custom:changelog-card' };
@@ -23,13 +25,23 @@ export class ChangeLogCard extends HTMLElement {
         this._lastViewedKey = 'changelog_last_viewed';
         this._hasAutoOpened = false;
         this._defaultButtonText = 'Show Changelog';
+        this._md = marked.parse;
+        if (!this._md) {
+            console.warn('Markdown parser not available');
+        } else {
+            try {
+                const test = this._md('# Test');
+                console.log('Markdown parser test:', test);
+            } catch (e) {
+                console.error('Markdown parser test failed:', e);
+            }
+        }
     }
 
     setConfig(config) {
         if (!config || !config.entity) {
             throw new Error('Please define an input_text entity');
         }
-        // Verify entity exists and is the correct type
         if (this._hass && (!this._hass.states[config.entity] ||
             !this._hass.states[config.entity].entity_id.startsWith('input_text.'))) {
             throw new Error('Entity must be an input_text entity');
@@ -119,6 +131,57 @@ export class ChangeLogCard extends HTMLElement {
 
             .changelog-content {
                 color: var(--primary-text-color);
+                line-height: 1.5;
+            }
+
+            .changelog-content h1 {
+                font-size: 1.5em;
+                margin-top: 0.5em;
+                margin-bottom: 0.5em;
+            }
+
+            .changelog-content h2 {
+                font-size: 1.3em;
+                margin-top: 0.5em;
+                margin-bottom: 0.5em;
+            }
+
+            .changelog-content h3 {
+                font-size: 1.1em;
+                margin-top: 0.5em;
+                margin-bottom: 0.5em;
+            }
+
+            .changelog-content ul, .changelog-content ol {
+                margin-top: 0.5em;
+                margin-bottom: 0.5em;
+                padding-left: 1.5em;
+            }
+
+            .changelog-content p {
+                margin-top: 0.5em;
+                margin-bottom: 0.5em;
+            }
+
+            .changelog-content code {
+                background-color: var(--code-background-color, var(--secondary-background-color));
+                padding: 0.2em 0.4em;
+                border-radius: 3px;
+                font-family: var(--code-font-family, monospace);
+            }
+
+            .changelog-content pre {
+                background-color: var(--code-background-color, var(--secondary-background-color));
+                padding: 1em;
+                border-radius: 4px;
+                overflow-x: auto;
+            }
+
+            .changelog-content blockquote {
+                border-left: 4px solid var(--divider-color);
+                margin: 0.5em 0;
+                padding-left: 1em;
+                color: var(--secondary-text-color);
             }
 
             .footer {
@@ -185,7 +248,23 @@ export class ChangeLogCard extends HTMLElement {
 
         const changelogContent = this.shadowRoot?.querySelector('.changelog-content');
         if (changelogContent) {
-            changelogContent.innerHTML = state.state ? state.state.replace(/\n/g, '<br>') : '';
+            if (typeof this._md === 'function' && state.state) {
+                try {
+                    // Replace literal \n with actual newlines and parse markdown
+                    const processedText = state.state.replace(/\\n/g, '\n');
+                    const htmlContent = this._md(processedText, {
+                        breaks: true,
+                        gfm: true
+                    });
+                    changelogContent.innerHTML = htmlContent;
+                } catch (error) {
+                    console.error('Failed to parse markdown:', error);
+                    console.log('Content attempted to parse:', state.state);
+                    changelogContent.innerHTML = state.state.replace(/\n/g, '<br>');
+                }
+            } else {
+                changelogContent.innerHTML = state.state ? state.state.replace(/\n/g, '<br>') : '';
+            }
         }
 
         const button = this.shadowRoot?.querySelector('.dash-button');
