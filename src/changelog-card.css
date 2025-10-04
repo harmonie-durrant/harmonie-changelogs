@@ -1,0 +1,37 @@
+ha-dialog {
+  --mdc-dialog-min-width: 400px;
+  --mdc-dialog-max-width: 600px;
+  --mdc-dialog-heading-ink-color: var(--primary-text-color);
+  --mdc-dialog-content-ink-color: var(--primary-text-color);
+  --justify-action-buttons: flex-end;
+}
+
+.heading {
+  border-bottom: 1px solid var(--divider-color);
+}
+
+.title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.title-icon {
+  color: var(--primary-text-color);
+  --mdc-icon-size: 24px;
+}
+
+.content {
+  padding: 16px;
+}
+
+.changelog-content {
+  color: var(--primary-text-color);
+}
+
+.footer {
+  padding: 8px;
+  border-top: 1px solid var(--divider-color);
+  display: flex;
+  justify-content: flex-end;
+}
