@@ -101,6 +101,19 @@ async function onboard() {
     return tokens;
 }
 
+// /manifest.json answers before integrations (input_text, template, ...) have
+// loaded. Wait until Home Assistant reports it has fully started.
+async function waitForRunning(tokens) {
+    for (let i = 0; i < 120; i++) {
+        try {
+            const response = await fetch(`${HA}/api/config`, { headers: { authorization: `Bearer ${tokens.access_token}` } });
+            if (response.ok && (await response.json()).state === 'RUNNING') return;
+        } catch { /* restarting */ }
+        await sleep(1000);
+    }
+    throw new Error('Home Assistant never reached the RUNNING state');
+}
+
 async function refreshTokens(tokens) {
     const fresh = await (await fetch(`${HA}/auth/token`, {
         method: 'POST',
@@ -182,6 +195,7 @@ async function run() {
 
         const login = async () => {
             tokens = await refreshTokens(tokens);
+            await waitForRunning(tokens);
             await page.goto(`${HA}/`, { waitUntil: 'domcontentloaded' });
             await page.evaluate((t, ha, client) => localStorage.setItem('hassTokens', JSON.stringify({
                 ...t, hassUrl: ha, clientId: client, expires: Date.now() + t.expires_in * 1000,
@@ -189,6 +203,20 @@ async function run() {
         };
         const open = async (view) => {
             await page.goto(`${HA}/test-dash/${view}`, { waitUntil: 'networkidle2' });
+            // Wait until every card on the view has received hass. CI runners
+            // can be much slower than a dev machine on the first loads.
+            await page.waitForFunction(() => {
+                const find = (root, found = []) => {
+                    root.querySelectorAll('*').forEach((el) => {
+                        if (el.localName === 'changelog-card') found.push(el);
+                        if (el.shadowRoot) find(el.shadowRoot, found);
+                    });
+                    return found;
+                };
+                const cards = find(document);
+                return cards.length > 0 && cards.every((card) => card._hass);
+            }, { timeout: 60000, polling: 250 });
+            // Seen state and markdown rendering are asynchronous.
             await sleep(2500);
         };
         const card = (index = 0) => page.evaluate(CARD_STATE, index);
