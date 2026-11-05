@@ -25,9 +25,17 @@ const CONTAINER = `changelog-e2e-${PORT}`;
 const SCREENSHOT_DIR = process.env.SCREENSHOT_DIR;
 
 const results = [];
+// On GitHub Actions, also report failures as annotations so they show up on
+// the run and on pull requests.
+const annotate = (message) => {
+    if (process.env.GITHUB_ACTIONS) {
+        console.log(`::error title=E2E (${IMAGE})::${String(message).replace(/\r?\n/g, '%0A')}`);
+    }
+};
 const check = (name, ok, detail = '') => {
     results.push({ name, ok: Boolean(ok), detail });
     console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? `  (${detail})` : ''}`);
+    if (!ok) annotate(`${name}${detail ? ` (${detail})` : ''}`);
 };
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const docker = (...args) => execFileSync('docker', args, { encoding: 'utf8' }).trim();
@@ -379,5 +387,6 @@ async function run() {
 
 run().catch((error) => {
     console.error(error);
+    annotate(error.stack || error);
     process.exit(1);
 });
