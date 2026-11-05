@@ -193,13 +193,20 @@ async function run() {
         page.on('pageerror', (error) => pageErrors.push(String(error)));
         page.on('console', (message) => consoleLines.push(`${message.type()}: ${message.text()}`));
 
+        // Store the login tokens before any Home Assistant code runs on each
+        // page load. Setting them after the first load races with the
+        // frontend, which can redirect to the login page and clear them.
+        let tokenScript = null;
         const login = async () => {
             tokens = await refreshTokens(tokens);
             await waitForRunning(tokens);
-            await page.goto(`${HA}/`, { waitUntil: 'domcontentloaded' });
-            await page.evaluate((t, ha, client) => localStorage.setItem('hassTokens', JSON.stringify({
-                ...t, hassUrl: ha, clientId: client, expires: Date.now() + t.expires_in * 1000,
-            })), tokens, HA, CLIENT_ID);
+            if (tokenScript) await page.removeScriptToEvaluateOnNewDocument(tokenScript.identifier);
+            tokenScript = await page.evaluateOnNewDocument((t, ha, client) => {
+                if (location.origin !== ha) return;
+                localStorage.setItem('hassTokens', JSON.stringify({
+                    ...t, hassUrl: ha, clientId: client, expires: Date.now() + t.expires_in * 1000,
+                }));
+            }, tokens, HA, CLIENT_ID);
         };
         // Wait until every card on the view has received hass. CI runners
         // can be much slower than a dev machine on the first loads.
