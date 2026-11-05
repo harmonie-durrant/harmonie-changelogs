@@ -98,3 +98,7 @@ When developing run `npm install` to setup the project, and `npm run build` or `
 [Discord Server for support and discussion](https://discord.gg/Cjakvt9XJH)
 
 [Buy me a coffee.](https://buymeacoffee.com/harmonie)
+
+## License
+
+Released under the [MIT License](LICENSE).
