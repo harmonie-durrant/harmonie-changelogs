@@ -14,26 +14,13 @@ Harmonie's Changelogs is a custom Lovelace card for Home Assistant that allows y
 
 ## Installation
 
-### HACS Installation (Recommended)
-Use this button to add the repository to your HACS:
+### Marketplace (Recommended)
+
+Go to Settings > marketplace and search for "Harmonie's Changelogs"
+
+or
 
 [![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=harmonie-durrant&repository=harmonie-changelogs&category=frontend)
-
-or follow these steps:
-1. Add this repository to HACS by including it as a custom repository:
-  - Go to `HACS` > `Integrations` > `⋮` > `Custom repositories`.
-  - Paste the URL of this repository and select Lovelace as the category.
-2. Install the Entity Progress Card from HACS.
-
-### Manual Installation
-
-1. Clone the repository into the `/config/www/` directory in your Home Assistant setup.
-2. Add `/local/harmonie-changelogs/dist/index.js` to your Lovelace resources
-```yaml
-url: /local/harmonie-changelogs/dist/index.js
-type: module
-```
-3. if you are updating just replace the old file with the new and clear your browser cache. (or append `?v=x` to the end of the url where x is a number you increase with each update)
 
 ## How to use
 
@@ -47,16 +34,62 @@ hide_button: true
 
 ![Changelog card](docs/title.png)
 
+| Option | Required | Description |
+| --- | --- | --- |
+| `entity` | Yes | Entity holding the changelog (markdown). |
+| `attribute` | No | Read the changelog from this attribute instead of the entity's state. |
+| `title` | No | Popup title. Defaults to "Changelog". |
+| `hide_button` | No | Hide the "Show changelog" button. The popup still opens when the changelog changes. |
+| `button_text` | No | Custom text for the button. |
+
+Every option can also be set from the visual card editor.
+
+The popup opens once for each Home Assistant user, the first time they load the dashboard after the changelog text changes. "Seen" is stored per user in Home Assistant, so it syncs across their devices, and restarting Home Assistant doesn't show it again.
+
+### Changelogs longer than 255 characters
+
+Entity states are limited to 255 characters, but attributes aren't. Put the changelog in an attribute, for example with a template sensor:
+
+```yaml
+# configuration.yaml
+template:
+  - sensor:
+      - name: Changelog
+        state: "v2.0"
+        attributes:
+          content: |
+            ## v2.0
+            - A changelog as long as you like
+```
+
 ```yaml
 type: custom:changelog-card
-entity: input_text.changelog
-hide_button: true
-
+entity: sensor.changelog
+attribute: content
 ```
 
 ## Contributing
 
 Feel free to fork this repo and submit your changes through pull requests, or to suggest a feature/report a bug, make an issue in the issues tab of this repository.
+
+### Development environment
+
+Requirements: [Node.js](https://nodejs.org/) and [Docker](https://www.docker.com/).
+
+```sh
+npm ci           # install dependencies
+npm run watch    # rebuild dist/index.js on every change in src/
+npm run ha:up    # start a local Home Assistant on http://localhost:8123
+```
+
+The first time, finish Home Assistant's onboarding (create a local user). Then add the card to a dashboard, using `input_text.changelog` as the entity.
+
+- `dist/` is mounted into Home Assistant as `/local/harmonie-changelogs/` and loaded as a Lovelace resource. After a rebuild, hard-refresh the browser (Ctrl+Shift+R), or keep DevTools open with "Disable cache" ticked.
+- To trigger the popup, change the value of `input_text.changelog` (Settings > Entities).
+- For a changelog longer than 255 characters, use `entity: sensor.long_changelog` with `attribute: content`.
+- "Seen" state is saved in Home Assistant's per-user frontend storage under the key `harmonie_changelogs_seen`. To see the popup again, change the changelog text, or log in as a different user.
+- Home Assistant config lives in [dev/config/configuration.yaml](dev/config/configuration.yaml). Run `npm run ha:logs` to view logs and `npm run ha:down` to stop.
+- **Before committing, run `npm run build`**. `watch` produces an unminified dev build, and HACS ships whatever is committed in `dist/`.
 
 When developing run `npm install` to setup the project, and `npm run build` or `npm run watch` to build the project. (The watch command will automatically rebuild the project when you save a file)
 

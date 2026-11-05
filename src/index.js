@@ -1,13 +1,12 @@
-import { ChangeLogCard } from './changelog-card.js';
-import { ChangelogCardEditor } from './changelog-card.js';
+import { ChangeLogCard, ChangelogCardEditor } from './changelog-card.js';
 
 customElements.define('changelog-card', ChangeLogCard);
-
 customElements.define('changelog-card-editor', ChangelogCardEditor);
 
 window.customCards = window.customCards || [];
 window.customCards.push({
 	type: 'changelog-card',
-	name: 'Changelog Card',
-	description: 'A card that displays changelog information from an input_text entity'
+	name: "Harmonie's Changelog",
+	description: 'Shows your changelog in a popup the first time each user opens the dashboard after it changes.',
+	documentationURL: 'https://github.com/harmonie-durrant/harmonie-changelogs',
 });

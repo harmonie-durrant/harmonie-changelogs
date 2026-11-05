@@ -7,8 +7,11 @@
 		}
 	},
 	"scripts": {
-		"watch": "parcel watch",
-		"build": "parcel build"
+		"watch": "parcel watch --no-hmr",
+		"build": "parcel build",
+		"ha:up": "docker compose up -d",
+		"ha:down": "docker compose down",
+		"ha:logs": "docker compose logs -f homeassistant"
 	},
 	"devDependencies": {
 		"@parcel/transformer-inline-string": "^2.8.3",

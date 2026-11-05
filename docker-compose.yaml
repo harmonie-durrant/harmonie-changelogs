@@ -1,0 +1,16 @@
+# Local Home Assistant for testing the card.
+#   npm run watch        -> rebuilds dist/ on every save
+#   docker compose up -d -> http://localhost:8123
+services:
+  homeassistant:
+    image: ghcr.io/home-assistant/home-assistant:stable
+    container_name: harmonie-changelogs-ha
+    restart: unless-stopped
+    ports:
+      - "8123:8123"
+    environment:
+      - TZ=Europe/Paris
+    volumes:
+      - ./dev/config:/config
+      # Served by HA at /local/harmonie-changelogs/ - same path as a manual install
+      - ./dist:/config/www/harmonie-changelogs:ro

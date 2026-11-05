@@ -1,0 +1,43 @@
+# Dev-only Home Assistant config for testing harmonie-changelogs.
+default_config:
+
+homeassistant:
+  name: Changelog Dev
+  time_zone: Europe/Paris
+
+logger:
+  default: warning
+
+lovelace:
+  # Load the card the same way a user's Lovelace resource would.
+  resource_mode: yaml
+  resources:
+    - url: /local/harmonie-changelogs/index.js
+      type: module
+
+input_text:
+  # `initial` resets the value on every HA restart - change it in
+  # Developer tools > States (or the entity dialog) to trigger the popup.
+  changelog:
+    name: Changelog
+    max: 255
+    initial: "## v1.1\n- **New:** markdown support\n- Fixed popup header"
+
+template:
+  # Long changelog (> 255 chars) stored in an attribute:
+  #   type: custom:changelog-card
+  #   entity: sensor.long_changelog
+  #   attribute: content
+  - sensor:
+      - name: Long changelog
+        state: "v2.0"
+        attributes:
+          content: >-
+            ## v2.0\n
+            ### New\n
+            - Changelogs can now be read from an entity **attribute**, so they are no longer limited to 255 characters.\n
+            - The "seen" state is stored per Home Assistant user and syncs across devices.\n
+            ### Fixed\n
+            - The popup now shows on a browser's first visit.\n
+            - Restarting Home Assistant no longer re-opens the popup.\n
+            - Several changelog cards no longer share their seen state.

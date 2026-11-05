@@ -1,5 +1,6 @@
 node_modules/
 .parcel-cache/
 
-start/
-docker-compose.yaml
+# Local Home Assistant dev instance: keep config, ignore runtime state
+dev/config/*
+!dev/config/configuration.yaml

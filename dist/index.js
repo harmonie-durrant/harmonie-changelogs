@@ -1557,405 +1557,470 @@ Please report this to https://github.com/markedjs/marked.`, e) {
 });
 
 
-class $5e992beb3636530b$export$abf9e6a64b1b3473 extends HTMLElement {
-    static getStubConfig() {
-        return {
-            type: 'custom:changelog-card'
-        };
+// Key in Home Assistant's per-user frontend storage (synced across devices).
+// Value shape: { "<entity>|<attribute>": "<hash of the content the user saw>" }
+const $5e992beb3636530b$var$USER_DATA_KEY = 'harmonie_changelogs_seen';
+// Older versions stored a "last viewed" timestamp per browser here.
+const $5e992beb3636530b$var$LEGACY_LAST_VIEWED_KEY = 'changelog_last_viewed';
+const $5e992beb3636530b$var$DEFAULT_TITLE = 'Changelog';
+const $5e992beb3636530b$var$DEFAULT_BUTTON_TEXT = 'Show changelog';
+// cyrb53: small, fast, non-cryptographic string hash. crypto.subtle is not
+// an option: it's unavailable when HA is served over plain http on a LAN.
+function $5e992beb3636530b$var$hashContent(str) {
+    let h1 = 0xdeadbeef, h2 = 0x41c6ce57;
+    for(let i = 0; i < str.length; i++){
+        const ch = str.charCodeAt(i);
+        h1 = Math.imul(h1 ^ ch, 2654435761);
+        h2 = Math.imul(h2 ^ ch, 1597334677);
     }
-    static async getConfigElement() {
+    h1 = Math.imul(h1 ^ h1 >>> 16, 2246822507) ^ Math.imul(h2 ^ h2 >>> 13, 3266489909);
+    h2 = Math.imul(h2 ^ h2 >>> 16, 2246822507) ^ Math.imul(h1 ^ h1 >>> 13, 3266489909);
+    return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36);
+}
+function $5e992beb3636530b$var$fireEvent(node, type, detail) {
+    node.dispatchEvent(new CustomEvent(type, {
+        detail: detail,
+        bubbles: true,
+        composed: true
+    }));
+}
+const $5e992beb3636530b$var$CARD_STYLES = `
+    [hidden] {
+        display: none !important;
+    }
+
+    .open-button {
+        width: 100%;
+    }
+
+    .placeholder {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 12px 16px;
+        border: 1px dashed var(--divider-color);
+        border-radius: var(--ha-card-border-radius, 12px);
+        color: var(--secondary-text-color);
+    }
+
+    ha-alert {
+        display: block;
+        margin-bottom: 8px;
+    }
+
+    .footer {
+        display: flex;
+        justify-content: flex-end;
+        width: 100%;
+    }
+
+    .changelog-content {
+        color: var(--primary-text-color);
+        line-height: 1.5;
+    }
+
+    .changelog-content > :first-child {
+        margin-top: 0;
+    }
+
+    .changelog-content h1 {
+        font-size: 1.5em;
+        margin: 0.5em 0;
+    }
+
+    .changelog-content h2 {
+        font-size: 1.3em;
+        margin: 0.5em 0;
+    }
+
+    .changelog-content h3 {
+        font-size: 1.1em;
+        margin: 0.5em 0;
+    }
+
+    .changelog-content ul, .changelog-content ol {
+        margin: 0.5em 0;
+        padding-left: 1.5em;
+    }
+
+    .changelog-content p {
+        margin: 0.5em 0;
+    }
+
+    .changelog-content a {
+        color: var(--primary-color);
+    }
+
+    .changelog-content code {
+        background-color: var(--code-background-color, var(--secondary-background-color));
+        padding: 0.2em 0.4em;
+        border-radius: 3px;
+        font-family: var(--code-font-family, monospace);
+    }
+
+    .changelog-content pre {
+        background-color: var(--code-background-color, var(--secondary-background-color));
+        padding: 1em;
+        border-radius: 4px;
+        overflow-x: auto;
+    }
+
+    .changelog-content blockquote {
+        border-left: 4px solid var(--divider-color);
+        margin: 0.5em 0;
+        padding-left: 1em;
+        color: var(--secondary-text-color);
+    }
+`;
+class $5e992beb3636530b$export$abf9e6a64b1b3473 extends HTMLElement {
+    static getConfigElement() {
         return document.createElement('changelog-card-editor');
     }
-    static get properties() {
-        return {
-            hass: {},
-            _config: {},
-            _dialog: {}
-        };
+    // Pre-fill the entity when the card is added from the card picker.
+    static getStubConfig(hass) {
+        const ids = Object.keys(hass?.states || {}).filter((id)=>id.startsWith('input_text.'));
+        const entity = ids.find((id)=>id.includes('changelog')) || ids[0];
+        return entity ? {
+            entity: entity
+        } : {};
     }
     constructor(){
         super();
         this._config = {};
-        this._dialog = null;
         this._hass = null;
-        this._lastViewedKey = 'changelog_last_viewed';
+        this._editMode = false;
+        this._preview = false;
         this._hasAutoOpened = false;
-        this._defaultButtonText = 'Show Changelog';
-        this._md = (0, $90482e2fcda9b250$exports.marked).parse;
-        if (!this._md) console.warn('Markdown parser not available');
-        else try {
-            const test = this._md('# Test');
-            console.log('Markdown parser test:', test);
-        } catch (e) {
-            console.error('Markdown parser test failed:', e);
-        }
-    }
-    setConfig(config) {
-        if (!config || !config.entity) throw new Error('Please define an input_text entity');
-        if (this._hass && (!this._hass.states[config.entity] || !this._hass.states[config.entity].entity_id.startsWith('input_text.'))) throw new Error('Entity must be an input_text entity');
-        const configChanged = JSON.stringify(this._config) !== JSON.stringify(config);
-        this._config = config;
-        if (configChanged) this._createCard();
-    }
-    _checkShouldAutoOpen() {
-        if (window.location.search.includes('edit=1')) return false;
-        if (this._hasAutoOpened || !this._hass || !this._config.entity) return false;
-        const state = this._hass.states[this._config.entity];
-        if (!state || !state.last_updated) return false;
-        const lastUpdated = new Date(state.last_updated).getTime();
-        const lastViewed = parseInt(localStorage.getItem(this._lastViewedKey) || '0');
-        return lastUpdated > lastViewed;
-    }
-    _updateLastViewed() {
-        localStorage.setItem(this._lastViewedKey, Date.now().toString());
-    }
-    set hass(hass) {
-        this._hass = hass;
-        if (this._config && this._config.entity) this.render();
-    }
-    async firstUpdated() {
-        await this._createCard();
-    }
-    async _createCard() {
-        if (!localStorage.getItem(this._lastViewedKey)) this._updateLastViewed();
-        const shadow = this.attachShadow({
+        this._checkedHash = null;
+        this._currentHash = null;
+        this._renderedContent = null;
+        // Built once. Config and state changes only update this DOM.
+        this.attachShadow({
             mode: 'open'
         });
-        const style = document.createElement('style');
-        style.textContent = `
-            ha-dialog {
-                --mdc-dialog-min-width: 400px;
-                --mdc-dialog-max-width: 600px;
-                --mdc-dialog-heading-ink-color: var(--primary-text-color);
-                --mdc-dialog-content-ink-color: var(--primary-text-color);
-                --justify-action-buttons: flex-end;
-                --ha-dialog-border-radius: var(--ha-card-border-radius, 12px);
-            }
-
-            .heading {
-                border-bottom: 1px solid var(--divider-color);
-                padding: 16px;
-                display: flex;
-                align-items: center;
-                background: var(--ha-card-header-background, var(--card-background-color, var(--primary-background-color)));
-                border-top-left-radius: var(--ha-dialog-border-radius);
-                border-top-right-radius: var(--ha-dialog-border-radius);
-            }
-
-            .title {
-                display: flex;
-                align-items: center;
-                gap: 8px;
-                font-size: 1.2em;
-                font-weight: 500;
-                color: var(--ha-card-header-color, var(--primary-text-color));
-            }
-
-            .title-icon {
-                color: var(--ha-card-header-color, var(--primary-text-color));
-                --mdc-icon-size: 24px;
-            }
-
-            .content {
-                padding: 16px;
-            }
-
-            .changelog-content {
-                color: var(--primary-text-color);
-                line-height: 1.5;
-            }
-
-            .changelog-content h1 {
-                font-size: 1.5em;
-                margin-top: 0.5em;
-                margin-bottom: 0.5em;
-            }
-
-            .changelog-content h2 {
-                font-size: 1.3em;
-                margin-top: 0.5em;
-                margin-bottom: 0.5em;
-            }
-
-            .changelog-content h3 {
-                font-size: 1.1em;
-                margin-top: 0.5em;
-                margin-bottom: 0.5em;
-            }
-
-            .changelog-content ul, .changelog-content ol {
-                margin-top: 0.5em;
-                margin-bottom: 0.5em;
-                padding-left: 1.5em;
-            }
-
-            .changelog-content p {
-                margin-top: 0.5em;
-                margin-bottom: 0.5em;
-            }
-
-            .changelog-content code {
-                background-color: var(--code-background-color, var(--secondary-background-color));
-                padding: 0.2em 0.4em;
-                border-radius: 3px;
-                font-family: var(--code-font-family, monospace);
-            }
-
-            .changelog-content pre {
-                background-color: var(--code-background-color, var(--secondary-background-color));
-                padding: 1em;
-                border-radius: 4px;
-                overflow-x: auto;
-            }
-
-            .changelog-content blockquote {
-                border-left: 4px solid var(--divider-color);
-                margin: 0.5em 0;
-                padding-left: 1em;
-                color: var(--secondary-text-color);
-            }
-
-            .footer {
-                padding: 8px;
-                border-top: 1px solid var(--divider-color);
-                display: flex;
-                justify-content: flex-end;
-            }
-        `;
-        const content = document.createElement('div');
-        content.innerHTML = `
+        this.shadowRoot.innerHTML = `
+            <style>${$5e992beb3636530b$var$CARD_STYLES}</style>
+            <ha-alert alert-type="warning" hidden></ha-alert>
+            <div class="placeholder" hidden>
+                <ha-icon icon="mdi:text-box-outline"></ha-icon>
+                <span>Changelog popup (button hidden on the dashboard)</span>
+            </div>
+            <ha-button class="open-button"></ha-button>
             <ha-dialog>
-                <div class="heading">
-                    <ha-icon icon="mdi:text-box-plus-outline" class="title-icon"></ha-icon>
-                    <div class="title">Changelog</div>
-                </div>
-
-                <div class="content">
-                    <div class="changelog-content"></div>
-                </div>
-
-                <div slot="primaryAction" class="footer">
-                    <ha-button dialogAction="close">Dismiss</ha-button>
+                <div class="changelog-content"></div>
+                <div slot="footer" class="footer">
+                    <ha-button class="dismiss">Dismiss</ha-button>
                 </div>
             </ha-dialog>
         `;
-        shadow.appendChild(style);
-        shadow.appendChild(content);
-        this._dialog = shadow.querySelector('ha-dialog');
-        const button = document.createElement('ha-button');
-        button.className = 'dash-button';
-        button.innerText = this._config.button_text || this._defaultButtonText;
-        button.addEventListener('click', ()=>this._openDialog());
-        button.style.display = this._config.hide_button ? 'none' : '';
-        shadow.appendChild(button);
+        this._alert = this.shadowRoot.querySelector('ha-alert');
+        this._placeholder = this.shadowRoot.querySelector('.placeholder');
+        this._button = this.shadowRoot.querySelector('.open-button');
+        this._dialog = this.shadowRoot.querySelector('ha-dialog');
+        this._content = this.shadowRoot.querySelector('.changelog-content');
+        this._button.addEventListener('click', ()=>this._openDialog());
+        this.shadowRoot.querySelector('.dismiss').addEventListener('click', ()=>{
+            this._dialog.open = false;
+        });
+        // ha-dialog doesn't reset `open` when closed with its X button,
+        // Escape or a click outside, which would stop it from reopening.
+        this._dialog.addEventListener('closed', ()=>{
+            this._dialog.open = false;
+        });
     }
-    render() {
-        if (!this._hass || !this._config || !this._config.entity) {
-            console.warn('Incomplete initialization');
+    setConfig(config) {
+        if (!config) throw new Error('Invalid configuration');
+        const entityChanged = config.entity !== this._config.entity || config.attribute !== this._config.attribute;
+        this._config = {
+            ...config
+        };
+        if (entityChanged) {
+            this._hasAutoOpened = false;
+            this._checkedHash = null;
+        }
+        this._update();
+    }
+    set hass(hass) {
+        this._hass = hass;
+        this._update();
+    }
+    // Set by Home Assistant while the dashboard is being edited.
+    set editMode(value) {
+        this._editMode = Boolean(value);
+        this._update();
+    }
+    set preview(value) {
+        this._preview = Boolean(value);
+        this._update();
+    }
+    get _isEditing() {
+        return this._editMode || this._preview || window.location.search.includes('edit=1');
+    }
+    getCardSize() {
+        return this._config.hide_button ? 0 : 1;
+    }
+    getGridOptions() {
+        return this._config.hide_button ? {
+            columns: 'full',
+            rows: 'auto'
+        } : {
+            columns: 6,
+            rows: 1,
+            min_rows: 1
+        };
+    }
+    // Changelog text: the entity's state, or one of its attributes. Attributes
+    // aren't capped at 255 characters like states are.
+    _getContent(state) {
+        if (this._config.attribute) {
+            const value = state.attributes?.[this._config.attribute];
+            return value === undefined || value === null ? '' : String(value);
+        }
+        if ([
+            'unknown',
+            'unavailable'
+        ].includes(state.state)) return '';
+        return state.state || '';
+    }
+    _getWarning(state) {
+        const { entity: entity, attribute: attribute } = this._config;
+        if (!entity) return 'Choose the entity that holds your changelog in the card editor.';
+        if (!this._hass) return '';
+        if (!state) return `Entity not found: ${entity}`;
+        if (attribute && !(attribute in state.attributes)) return `Attribute "${attribute}" not found on ${entity}`;
+        return '';
+    }
+    _update() {
+        const { entity: entity, hide_button: hide_button, button_text: button_text, title: title } = this._config;
+        const state = entity && this._hass ? this._hass.states[entity] : undefined;
+        const content = state ? this._getContent(state) : '';
+        const warning = this._getWarning(state);
+        this._alert.textContent = warning;
+        this._alert.hidden = !warning;
+        this._button.textContent = button_text || $5e992beb3636530b$var$DEFAULT_BUTTON_TEXT;
+        this._button.hidden = Boolean(hide_button);
+        this._button.disabled = !content;
+        this._placeholder.hidden = !(hide_button && this._isEditing);
+        this._dialog.headerTitle = title || $5e992beb3636530b$var$DEFAULT_TITLE;
+        if (content !== this._renderedContent) {
+            this._renderedContent = content;
+            this._content.innerHTML = this._renderMarkdown(content);
+        }
+        this._currentHash = content ? $5e992beb3636530b$var$hashContent(content) : null;
+        if (this._currentHash && !this._isEditing) this._maybeAutoOpen(state, this._currentHash);
+    }
+    _renderMarkdown(content) {
+        if (!content) return '';
+        // input_text can't hold real newlines, so allow a literal "\n".
+        const text = content.replace(/\\n/g, '\n');
+        try {
+            return (0, $90482e2fcda9b250$exports.marked).parse(text, {
+                breaks: true,
+                gfm: true
+            });
+        } catch (error) {
+            console.error('changelog-card: failed to parse markdown', error);
+            const escaped = document.createElement('div');
+            escaped.textContent = text;
+            return escaped.innerHTML.replace(/\n/g, '<br>');
+        }
+    }
+    // One entry per entity/attribute, so several changelog cards don't share "seen" state.
+    get _seenKey() {
+        return `${this._config.entity}|${this._config.attribute || ''}`;
+    }
+    async _loadSeen() {
+        try {
+            const result = await this._hass.callWS({
+                type: 'frontend/get_user_data',
+                key: $5e992beb3636530b$var$USER_DATA_KEY
+            });
+            return result?.value || {};
+        } catch (error) {
+            console.error('changelog-card: failed to read seen state', error);
+            return null;
+        }
+    }
+    async _saveSeen(hash) {
+        // Re-read first so we don't overwrite entries saved by other cards.
+        const seen = await this._loadSeen();
+        if (!seen) return;
+        seen[this._seenKey] = hash;
+        try {
+            await this._hass.callWS({
+                type: 'frontend/set_user_data',
+                key: $5e992beb3636530b$var$USER_DATA_KEY,
+                value: seen
+            });
+        } catch (error) {
+            console.error('changelog-card: failed to save seen state', error);
+        }
+    }
+    // Older versions stored a per-browser "last viewed" timestamp. Treat the
+    // current changelog as seen if it hasn't changed since then.
+    _seenBeforeUpgrade(state) {
+        const lastViewed = parseInt(localStorage.getItem($5e992beb3636530b$var$LEGACY_LAST_VIEWED_KEY) || '0');
+        return lastViewed > 0 && new Date(state.last_updated).getTime() <= lastViewed;
+    }
+    async _maybeAutoOpen(state, hash) {
+        if (this._hasAutoOpened) return;
+        // Only check each version of the content once, not on every hass update.
+        if (hash === this._checkedHash) return;
+        this._checkedHash = hash;
+        const seen = await this._loadSeen();
+        if (!seen || seen[this._seenKey] === hash) return;
+        if (seen[this._seenKey] === undefined && this._seenBeforeUpgrade(state)) {
+            await this._saveSeen(hash);
             return;
         }
-        const entityId = this._config.entity;
-        const state = this._hass.states[entityId];
-        if (!state) {
-            console.error(`Entity ${entityId} not found`);
-            const alert = this.shadowRoot?.querySelector('ha-alert');
-            if (alert) {
-                alert.innerText = `Entity ${entityId} not found`;
-                alert.style.display = 'block';
-            }
-            return;
-        }
-        const alert = this.shadowRoot?.querySelector('ha-alert');
-        if (alert) alert.style.display = 'none';
-        const changelogContent = this.shadowRoot?.querySelector('.changelog-content');
-        if (changelogContent) {
-            if (typeof this._md === 'function' && state.state) try {
-                // Replace literal \n with actual newlines and parse markdown
-                const processedText = state.state.replace(/\\n/g, '\n');
-                const htmlContent = this._md(processedText, {
-                    breaks: true,
-                    gfm: true
-                });
-                changelogContent.innerHTML = htmlContent;
-            } catch (error) {
-                console.error('Failed to parse markdown:', error);
-                console.log('Content attempted to parse:', state.state);
-                changelogContent.innerHTML = state.state.replace(/\n/g, '<br>');
-            }
-            else changelogContent.innerHTML = state.state ? state.state.replace(/\n/g, '<br>') : '';
-        }
-        const button = this.shadowRoot?.querySelector('.dash-button');
-        if (button) {
-            button.disabled = !state.state;
-            button.innerText = this._config.button_text || this._defaultButtonText;
-            button.style.display = this._config.hide_button ? 'none' : '';
-        }
-        if (!this._hasAutoOpened && this._checkShouldAutoOpen()) {
-            this._hasAutoOpened = true;
-            this._openDialog();
-        }
+        // Content may have changed, the dialog opened, or editing started while we waited.
+        if (this._hasAutoOpened || this._checkedHash !== hash || this._isEditing) return;
+        this._hasAutoOpened = true;
+        this._openDialog();
     }
     _openDialog() {
-        if (!this._dialog) this._dialog = this.shadowRoot.querySelector('ha-dialog');
-        if (this._dialog) {
-            this._dialog.open = true;
-            this._updateLastViewed();
-        }
+        if (!this._currentHash) return;
+        this._dialog.open = true;
+        this._saveSeen(this._currentHash);
     }
 }
+const $5e992beb3636530b$var$EDITOR_LABELS = {
+    entity: 'Entity',
+    attribute: 'Attribute (optional)',
+    title: 'Popup title (optional)',
+    hide_button: 'Hide button',
+    button_text: 'Button text (optional)'
+};
+const $5e992beb3636530b$var$EDITOR_HELPERS = {
+    entity: 'The entity that holds your changelog. Markdown is supported.',
+    attribute: 'Read the changelog from an attribute instead of the state. Attributes aren\'t limited to 255 characters.',
+    title: `Defaults to "${$5e992beb3636530b$var$DEFAULT_TITLE}".`,
+    hide_button: 'The popup still opens automatically when the changelog changes.',
+    button_text: `Defaults to "${$5e992beb3636530b$var$DEFAULT_BUTTON_TEXT}".`
+};
+const $5e992beb3636530b$var$OPTIONAL_TEXT_KEYS = [
+    'attribute',
+    'title',
+    'button_text'
+];
 class $5e992beb3636530b$export$12f681b7a98048a8 extends HTMLElement {
     constructor(){
         super();
         this._config = {};
         this._hass = null;
-        this._overridableElements = {};
-        this._rendered = false;
-        this._currentLanguage = 'en';
-        this._card_fields = [
+        this._form = null;
+    }
+    set hass(hass) {
+        this._hass = hass;
+        if (this._form) this._form.hass = hass;
+    }
+    setConfig(config) {
+        this._config = {
+            ...config
+        };
+        this._render();
+    }
+    _schema(config) {
+        return [
             {
                 name: 'entity',
-                label: 'Changelog Text Entity',
-                type: 'entity',
                 required: true,
-                description: 'Select an input_text entity that contains your changelog content.',
                 selector: {
-                    entity: {
-                        domain: 'input_text'
-                    }
+                    entity: {}
                 }
             },
             {
-                name: 'button_text',
-                label: 'Button Text',
-                type: 'text',
-                required: false,
-                description: 'Custom text for the changelog button. Leave empty to use the default text.'
+                name: 'attribute',
+                selector: {
+                    attribute: {}
+                },
+                context: {
+                    filter_entity: 'entity'
+                }
             },
             {
-                name: 'hide_button',
-                label: 'Hide Button',
-                type: 'boolean',
-                required: false,
-                description: 'Hide the changelog button on the dashboard, the changelog will still show up when there are new entries.'
+                name: 'title',
+                selector: {
+                    text: {}
+                }
+            },
+            {
+                name: 'button',
+                type: 'expandable',
+                flatten: true,
+                expanded: true,
+                title: 'Button',
+                icon: 'mdi:gesture-tap-button',
+                schema: [
+                    {
+                        name: 'hide_button',
+                        selector: {
+                            boolean: {}
+                        }
+                    },
+                    ...config.hide_button ? [] : [
+                        {
+                            name: 'button_text',
+                            selector: {
+                                text: {}
+                            }
+                        }
+                    ]
+                ]
             }
         ];
     }
-    set hass(hass) {
-        if (!hass) return;
-        this._currentLanguage = 'en';
-        if (!this._hass || this._hass.entities !== hass.entities) {
-            this._hass = hass;
-            if (this._rendered) this.render();
+    async _render() {
+        if (!this._form) {
+            await this._loadHaForm();
+            if (this._form) return this._render();
+            this._form = document.createElement('ha-form');
+            this._form.computeLabel = (schema)=>$5e992beb3636530b$var$EDITOR_LABELS[schema.name] ?? schema.title ?? schema.name;
+            this._form.computeHelper = (schema)=>$5e992beb3636530b$var$EDITOR_HELPERS[schema.name];
+            this._form.addEventListener('value-changed', (event)=>this._valueChanged(event));
+            this.appendChild(this._form);
         }
+        this._form.hass = this._hass;
+        this._form.data = this._config;
+        this._form.schema = this._schema(this._config);
     }
-    get hass() {
-        return this._hass;
-    }
-    setConfig(config) {
-        if (!this._hass) return;
-        this._config = config;
-        this.loadEntityPicker();
-        if (!this._rendered) {
-            this._rendered = true;
-            this.render();
-        }
-    }
-    _reorderConfig(config) {
-        const { grid_options: grid_options, ...rest } = config;
-        return grid_options ? {
-            ...rest,
-            grid_options: grid_options
-        } : {
-            ...rest
-        };
-    }
-    _updateConfigProperty(key, value) {
-        const newConfig = {
-            ...this._config
-        };
-        if (value === '') delete newConfig[key];
-        else newConfig[key] = value;
-        this._config = this._reorderConfig(newConfig);
-        this.dispatchEvent(new CustomEvent('config-changed', {
-            detail: {
-                config: {
-                    ...this._config
-                }
-            },
-            bubbles: true,
-            composed: true
-        }));
-    }
-    _createField({ name: name, label: label, type: type, required: required = false, description: description }) {
-        let inputElement;
-        const value = this._config[name] || '';
-        switch(type){
-            case 'entity':
-                inputElement = document.createElement('ha-entity-picker');
-                inputElement.hass = this._hass;
-                break;
-            case 'boolean':
-                inputElement = document.createElement('ha-switch');
-                inputElement.checked = value === true;
-                break;
-            default:
-                inputElement = document.createElement('ha-textfield');
-                inputElement.type = 'text';
-        }
-        inputElement.style.display = 'flex';
-        inputElement.required = required;
-        inputElement.label = label;
-        inputElement.value = value;
-        if (type === 'boolean') inputElement.addEventListener('change', (event)=>{
-            this._updateConfigProperty(name, event.target.checked);
-        });
-        else inputElement.addEventListener('value-changed', (event)=>{
-            const newValue = event.detail?.value || event.target.value;
-            this._updateConfigProperty(name, newValue);
-        });
-        const fieldContainer = document.createElement('div');
-        fieldContainer.style.marginBottom = '12px';
-        const fieldDescription = document.createElement('span');
-        fieldDescription.style.width = '90%';
-        fieldDescription.innerText = description;
-        fieldDescription.style.fontSize = '12px';
-        fieldDescription.style.color = '#888';
-        fieldContainer.appendChild(inputElement);
-        fieldContainer.appendChild(fieldDescription);
-        return fieldContainer;
-    }
-    async loadEntityPicker() {
-        if (!window.customElements.get("ha-entity-picker")) {
-            const ch = await window.loadCardHelpers();
-            const c = await ch.createCardElement({
-                type: "entities",
-                entities: []
+    // ha-form is lazy-loaded by Home Assistant. Loading a built-in card's
+    // editor guarantees it's defined.
+    async _loadHaForm() {
+        if (customElements.get('ha-form')) return;
+        try {
+            const helpers = await window.loadCardHelpers();
+            const card = await helpers.createCardElement({
+                type: 'entity',
+                entity: 'sun.sun'
             });
-            await c.constructor.getConfigElement();
-            const haEntityPicker = window.customElements.get("ha-entity-picker");
+            await card.constructor.getConfigElement();
+        } catch (error) {
+            console.warn('changelog-card: could not preload ha-form', error);
         }
+        await customElements.whenDefined('ha-form');
     }
-    render() {
-        this.innerHTML = '';
-        const fragment = document.createDocumentFragment();
-        const container = document.createElement('div');
-        container.style.display = 'flex';
-        container.style.flexDirection = 'column';
-        container.style.flexWrap = 'wrap';
-        container.style.overflow = 'auto';
-        container.style.overflowX = 'hidden';
-        container.style.maxHeight = '100vh';
-        this._card_fields.forEach((field)=>{
-            container.appendChild(this._createField({
-                name: field.name,
-                label: field.label,
-                type: field.type,
-                required: field.required,
-                description: field.description
-            }));
+    _valueChanged(event) {
+        event.stopPropagation();
+        const config = {
+            ...event.detail.value
+        };
+        // An attribute picked for the previous entity probably doesn't exist on the new one.
+        if (config.entity !== this._config.entity && config.attribute) {
+            const state = this._hass?.states[config.entity];
+            if (!state || !(config.attribute in state.attributes)) delete config.attribute;
+        }
+        // Keep the YAML tidy: drop empty and default values.
+        $5e992beb3636530b$var$OPTIONAL_TEXT_KEYS.forEach((key)=>{
+            if (!config[key]) delete config[key];
         });
-        fragment.appendChild(container);
-        this.appendChild(fragment);
+        if (!config.hide_button) delete config.hide_button;
+        if (config.hide_button) delete config.button_text;
+        this._config = config;
+        this._render();
+        $5e992beb3636530b$var$fireEvent(this, 'config-changed', {
+            config: config
+        });
     }
 }
 
@@ -1965,8 +2030,9 @@ customElements.define('changelog-card-editor', (0, $5e992beb3636530b$export$12f6
 window.customCards = window.customCards || [];
 window.customCards.push({
     type: 'changelog-card',
-    name: 'Changelog Card',
-    description: 'A card that displays changelog information from an input_text entity'
+    name: "Harmonie's Changelog",
+    description: 'Shows your changelog in a popup the first time each user opens the dashboard after it changes.',
+    documentationURL: 'https://github.com/harmonie-durrant/harmonie-changelogs'
 });
 
 
