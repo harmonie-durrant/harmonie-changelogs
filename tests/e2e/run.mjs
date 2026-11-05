@@ -201,21 +201,48 @@ async function run() {
                 ...t, hassUrl: ha, clientId: client, expires: Date.now() + t.expires_in * 1000,
             })), tokens, HA, CLIENT_ID);
         };
+        // Wait until every card on the view has received hass. CI runners
+        // can be much slower than a dev machine on the first loads.
+        const cardsReady = () => page.waitForFunction(() => {
+            const find = (root, found = []) => {
+                root.querySelectorAll('*').forEach((el) => {
+                    if (el.localName === 'changelog-card') found.push(el);
+                    if (el.shadowRoot) find(el.shadowRoot, found);
+                });
+                return found;
+            };
+            const cards = find(document);
+            return cards.length > 0 && cards.every((card) => card._hass);
+        }, { timeout: 45000, polling: 250 });
+        const describePage = () => page.evaluate(() => {
+            const ha = document.querySelector('home-assistant');
+            const count = (root, name) => [...root.querySelectorAll('*')]
+                .reduce((n, el) => n + (el.localName === name ? 1 : 0) + (el.shadowRoot ? count(el.shadowRoot, name) : 0), 0);
+            return JSON.stringify({
+                url: location.href,
+                hass: Boolean(ha?.hass),
+                connected: ha?.hass?.connected,
+                cards: count(document, 'changelog-card'),
+                cardDefined: Boolean(customElements.get('changelog-card')),
+                text: document.body.innerText.slice(0, 200),
+            });
+        });
         const open = async (view) => {
             await page.goto(`${HA}/test-dash/${view}`, { waitUntil: 'networkidle2' });
-            // Wait until every card on the view has received hass. CI runners
-            // can be much slower than a dev machine on the first loads.
-            await page.waitForFunction(() => {
-                const find = (root, found = []) => {
-                    root.querySelectorAll('*').forEach((el) => {
-                        if (el.localName === 'changelog-card') found.push(el);
-                        if (el.shadowRoot) find(el.shadowRoot, found);
-                    });
-                    return found;
-                };
-                const cards = find(document);
-                return cards.length > 0 && cards.every((card) => card._hass);
-            }, { timeout: 60000, polling: 250 });
+            try {
+                await cardsReady();
+            } catch {
+                // Record what was on screen, then give the page one more chance.
+                const before = await describePage();
+                console.log(`${process.env.GITHUB_ACTIONS ? '::warning title=E2E::' : ''}Cards on "${view}" not ready, reloading. Page: ${before}`);
+                if (SCREENSHOT_DIR) await page.screenshot({ path: path.join(SCREENSHOT_DIR, `timeout-${view}.png`) });
+                await page.reload({ waitUntil: 'networkidle2' });
+                try {
+                    await cardsReady();
+                } catch {
+                    throw new Error(`Cards on "${view}" never got ready. Before reload: ${before}. After: ${await describePage()}`);
+                }
+            }
             // Seen state and markdown rendering are asynchronous.
             await sleep(2500);
         };
