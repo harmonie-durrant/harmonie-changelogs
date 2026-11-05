@@ -1,6 +1,7 @@
 {
 	"name": "Harmonie's Changelogs",
-	"render_readme": true,
-    "filename": "index.js",
-    "content_in_root": false
+	"filename": "index.js",
+	"content_in_root": false,
+	"hide_default_branch": true,
+	"homeassistant": "2026.11.0"
 }

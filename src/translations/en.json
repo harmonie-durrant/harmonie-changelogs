@@ -1,0 +1,54 @@
+{
+	"card": {
+		"default_title": "Changelog",
+		"default_button_text": "Show changelog",
+		"dismiss": "Dismiss",
+		"unread": "New changelog",
+		"hidden_placeholder": "Changelog popup (button hidden on the dashboard)",
+		"warning": {
+			"no_source": "Choose an entity or a markdown file for your changelog in the card editor.",
+			"entity_not_found": "Entity not found: {entity}",
+			"attribute_not_found": "Attribute \"{attribute}\" not found on {entity}",
+			"file_error": "Couldn't load {url}: {error}"
+		}
+	},
+	"editor": {
+		"source": {
+			"label": "Changelog source",
+			"helper": "Where the changelog text comes from.",
+			"entity": "Entity",
+			"file": "Markdown file"
+		},
+		"entity": {
+			"label": "Entity",
+			"helper": "The entity that holds your changelog. Markdown is supported."
+		},
+		"attribute": {
+			"label": "Attribute (optional)",
+			"helper": "Read the changelog from an attribute instead of the state. Attributes aren't limited to 255 characters."
+		},
+		"url": {
+			"label": "File URL",
+			"helper": "A markdown file, e.g. /local/changelog.md for config/www/changelog.md. No length limit."
+		},
+		"title": {
+			"label": "Popup title (optional)",
+			"helper": "Defaults to \"{default}\"."
+		},
+		"behaviour": {
+			"title": "Popup and button"
+		},
+		"hide_button": {
+			"label": "Hide button",
+			"helper": "The popup still opens automatically when the changelog changes."
+		},
+		"auto_open": {
+			"label": "Open automatically",
+			"helper": "Open the popup the first time each user loads the dashboard after the changelog changes. When off, the button shows a dot instead."
+		},
+		"button_text": {
+			"label": "Button text (optional)",
+			"helper": "Defaults to \"{default}\"."
+		}
+	}
+}

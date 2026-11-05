@@ -1,0 +1,45 @@
+views:
+  - title: Basic
+    path: basic
+    cards:
+      - type: custom:changelog-card
+        entity: input_text.changelog
+  - title: Long
+    path: long
+    cards:
+      - type: custom:changelog-card
+        entity: sensor.long_changelog
+        attribute: content
+        title: What's new
+  - title: File
+    path: file
+    cards:
+      - type: custom:changelog-card
+        url: /local/changelog.md
+  - title: Manual
+    path: manual
+    cards:
+      - type: custom:changelog-card
+        entity: input_text.manual
+        auto_open: false
+  - title: Hidden
+    path: hidden
+    cards:
+      - type: custom:changelog-card
+        entity: input_text.changelog
+        hide_button: true
+  - title: XSS
+    path: xss
+    cards:
+      - type: custom:changelog-card
+        entity: input_text.xss
+  - title: Errors
+    path: errors
+    cards:
+      - type: custom:changelog-card
+        entity: input_text.nope
+      - type: custom:changelog-card
+        entity: sensor.long_changelog
+        attribute: nope
+      - type: custom:changelog-card
+        url: /local/nope.md

@@ -1,39 +1,37 @@
-import { marked } from 'marked';
+import { localize } from './localize.js';
+import { ensureHaElement, hashContent } from './helpers.js';
 
 // Key in Home Assistant's per-user frontend storage (synced across devices).
-// Value shape: { "<entity>|<attribute>": "<hash of the content the user saw>" }
+// Value shape: { "<seen key>": "<hash of the content the user saw>" }
 const USER_DATA_KEY = 'harmonie_changelogs_seen';
-// Older versions stored a "last viewed" timestamp per browser here.
+// Versions up to v0.0.4 stored a "last viewed" timestamp per browser here.
 const LEGACY_LAST_VIEWED_KEY = 'changelog_last_viewed';
-
-const DEFAULT_TITLE = 'Changelog';
-const DEFAULT_BUTTON_TEXT = 'Show changelog';
-
-// cyrb53: small, fast, non-cryptographic string hash. crypto.subtle is not
-// an option: it's unavailable when HA is served over plain http on a LAN.
-function hashContent(str) {
-    let h1 = 0xdeadbeef, h2 = 0x41c6ce57;
-    for (let i = 0; i < str.length; i++) {
-        const ch = str.charCodeAt(i);
-        h1 = Math.imul(h1 ^ ch, 2654435761);
-        h2 = Math.imul(h2 ^ ch, 1597334677);
-    }
-    h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
-    h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
-    return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36);
-}
-
-function fireEvent(node, type, detail) {
-    node.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
-}
+// How often a markdown file source is re-checked while the dashboard stays open.
+const FILE_REFRESH_MS = 10 * 60 * 1000;
 
 const CARD_STYLES = `
     [hidden] {
         display: none !important;
     }
 
+    .button-wrapper {
+        position: relative;
+    }
+
     .open-button {
         width: 100%;
+    }
+
+    .badge {
+        position: absolute;
+        top: -3px;
+        right: -3px;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background: var(--accent-color, var(--primary-color));
+        border: 2px solid var(--card-background-color, var(--primary-background-color));
+        pointer-events: none;
     }
 
     .placeholder {
@@ -51,68 +49,14 @@ const CARD_STYLES = `
         margin-bottom: 8px;
     }
 
+    ha-markdown {
+        display: block;
+    }
+
     .footer {
         display: flex;
         justify-content: flex-end;
         width: 100%;
-    }
-
-    .changelog-content {
-        color: var(--primary-text-color);
-        line-height: 1.5;
-    }
-
-    .changelog-content > :first-child {
-        margin-top: 0;
-    }
-
-    .changelog-content h1 {
-        font-size: 1.5em;
-        margin: 0.5em 0;
-    }
-
-    .changelog-content h2 {
-        font-size: 1.3em;
-        margin: 0.5em 0;
-    }
-
-    .changelog-content h3 {
-        font-size: 1.1em;
-        margin: 0.5em 0;
-    }
-
-    .changelog-content ul, .changelog-content ol {
-        margin: 0.5em 0;
-        padding-left: 1.5em;
-    }
-
-    .changelog-content p {
-        margin: 0.5em 0;
-    }
-
-    .changelog-content a {
-        color: var(--primary-color);
-    }
-
-    .changelog-content code {
-        background-color: var(--code-background-color, var(--secondary-background-color));
-        padding: 0.2em 0.4em;
-        border-radius: 3px;
-        font-family: var(--code-font-family, monospace);
-    }
-
-    .changelog-content pre {
-        background-color: var(--code-background-color, var(--secondary-background-color));
-        padding: 1em;
-        border-radius: 4px;
-        overflow-x: auto;
-    }
-
-    .changelog-content blockquote {
-        border-left: 4px solid var(--divider-color);
-        margin: 0.5em 0;
-        padding-left: 1em;
-        color: var(--secondary-text-color);
     }
 `;
 
@@ -135,9 +79,14 @@ export class ChangeLogCard extends HTMLElement {
         this._editMode = false;
         this._preview = false;
         this._hasAutoOpened = false;
+        this._unread = false;
         this._checkedHash = null;
         this._currentHash = null;
         this._renderedContent = null;
+        this._fileContent = null;
+        this._fileError = null;
+        this._fileRequest = 0;
+        this._fileTimer = null;
 
         // Built once. Config and state changes only update this DOM.
         this.attachShadow({ mode: 'open' });
@@ -146,40 +95,68 @@ export class ChangeLogCard extends HTMLElement {
             <ha-alert alert-type="warning" hidden></ha-alert>
             <div class="placeholder" hidden>
                 <ha-icon icon="mdi:text-box-outline"></ha-icon>
-                <span>Changelog popup (button hidden on the dashboard)</span>
+                <span></span>
             </div>
-            <ha-button class="open-button"></ha-button>
+            <div class="button-wrapper">
+                <ha-button class="open-button"></ha-button>
+                <span class="badge" hidden></span>
+            </div>
             <ha-dialog>
-                <div class="changelog-content"></div>
+                <ha-markdown breaks></ha-markdown>
                 <div slot="footer" class="footer">
-                    <ha-button class="dismiss">Dismiss</ha-button>
+                    <ha-button class="dismiss"></ha-button>
                 </div>
             </ha-dialog>
         `;
-        this._alert = this.shadowRoot.querySelector('ha-alert');
-        this._placeholder = this.shadowRoot.querySelector('.placeholder');
-        this._button = this.shadowRoot.querySelector('.open-button');
-        this._dialog = this.shadowRoot.querySelector('ha-dialog');
-        this._content = this.shadowRoot.querySelector('.changelog-content');
+        const $ = (selector) => this.shadowRoot.querySelector(selector);
+        this._alert = $('ha-alert');
+        this._placeholder = $('.placeholder');
+        this._buttonWrapper = $('.button-wrapper');
+        this._button = $('.open-button');
+        this._badge = $('.badge');
+        this._dialog = $('ha-dialog');
+        this._markdown = $('ha-markdown');
+        this._dismiss = $('.dismiss');
 
         this._button.addEventListener('click', () => this._openDialog());
-        this.shadowRoot.querySelector('.dismiss')
-            .addEventListener('click', () => { this._dialog.open = false; });
+        this._dismiss.addEventListener('click', () => { this._dialog.open = false; });
         // ha-dialog doesn't reset `open` when closed with its X button,
         // Escape or a click outside, which would stop it from reopening.
         this._dialog.addEventListener('closed', () => { this._dialog.open = false; });
+        this._onVisibilityChange = () => {
+            if (document.visibilityState === 'visible') this._loadFile();
+        };
+
+        ensureHaElement('ha-markdown', { type: 'markdown', content: '' });
+    }
+
+    connectedCallback() {
+        document.addEventListener('visibilitychange', this._onVisibilityChange);
+        this._loadFile();
+        this._syncFileTimer();
+    }
+
+    disconnectedCallback() {
+        document.removeEventListener('visibilitychange', this._onVisibilityChange);
+        clearInterval(this._fileTimer);
+        this._fileTimer = null;
     }
 
     setConfig(config) {
         if (!config) {
             throw new Error('Invalid configuration');
         }
-        const entityChanged = config.entity !== this._config.entity
-            || config.attribute !== this._config.attribute;
+        const sourceChanged = ['entity', 'attribute', 'url']
+            .some((key) => config[key] !== this._config[key]);
         this._config = { ...config };
-        if (entityChanged) {
+        if (sourceChanged) {
             this._hasAutoOpened = false;
+            this._unread = false;
             this._checkedHash = null;
+            this._fileContent = null;
+            this._fileError = null;
+            this._loadFile();
+            this._syncFileTimer();
         }
         this._update();
     }
@@ -204,6 +181,11 @@ export class ChangeLogCard extends HTMLElement {
         return this._editMode || this._preview || window.location.search.includes('edit=1');
     }
 
+    // With the button hidden, opening automatically is the only way to see the popup.
+    get _autoOpen() {
+        return Boolean(this._config.hide_button) || this._config.auto_open !== false;
+    }
+
     getCardSize() {
         return this._config.hide_button ? 0 : 1;
     }
@@ -214,71 +196,112 @@ export class ChangeLogCard extends HTMLElement {
             : { columns: 6, rows: 1, min_rows: 1 };
     }
 
-    // Changelog text: the entity's state, or one of its attributes. Attributes
-    // aren't capped at 255 characters like states are.
-    _getContent(state) {
-        if (this._config.attribute) {
-            const value = state.attributes?.[this._config.attribute];
-            return value === undefined || value === null ? '' : String(value);
+    _t(key, vars) {
+        return localize(this._hass, key, vars);
+    }
+
+    _syncFileTimer() {
+        clearInterval(this._fileTimer);
+        this._fileTimer = this._config.url && this.isConnected
+            ? setInterval(() => this._loadFile(), FILE_REFRESH_MS)
+            : null;
+    }
+
+    async _loadFile() {
+        const { url } = this._config;
+        if (!url) return;
+        const request = ++this._fileRequest;
+        try {
+            // HA's service worker answers /local/ from its cache first
+            // (stale-while-revalidate), and HA sends a 31-day cache header.
+            // A unique query parameter gets past both.
+            const fresh = new URL(url, window.location.origin);
+            fresh.searchParams.set('_changelog', Date.now().toString());
+            const response = await fetch(fresh, { cache: 'no-cache', credentials: 'same-origin' });
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            const text = await response.text();
+            if (request !== this._fileRequest) return;
+            this._fileContent = text;
+            this._fileError = null;
+        } catch (error) {
+            if (request !== this._fileRequest) return;
+            this._fileContent = null;
+            this._fileError = error.message;
         }
-        if (['unknown', 'unavailable'].includes(state.state)) return '';
-        return state.state || '';
+        this._update();
+    }
+
+    // Changelog text from the markdown file, the entity's state, or one of its
+    // attributes. Attributes aren't capped at 255 characters like states are.
+    _getContent(state) {
+        if (this._config.url) return this._fileContent || '';
+        if (!state) return '';
+        let value;
+        if (this._config.attribute) {
+            value = state.attributes?.[this._config.attribute];
+            value = value === undefined || value === null ? '' : String(value);
+        } else {
+            value = ['unknown', 'unavailable'].includes(state.state) ? '' : (state.state || '');
+        }
+        // input_text can't hold real newlines, so allow a literal "\n".
+        return value.replace(/\\n/g, '\n');
     }
 
     _getWarning(state) {
-        const { entity, attribute } = this._config;
-        if (!entity) return 'Choose the entity that holds your changelog in the card editor.';
+        const { entity, attribute, url } = this._config;
+        if (url) {
+            return this._fileError ? this._t('card.warning.file_error', { url, error: this._fileError }) : '';
+        }
+        if (!entity) return this._t('card.warning.no_source');
         if (!this._hass) return '';
-        if (!state) return `Entity not found: ${entity}`;
+        if (!state) return this._t('card.warning.entity_not_found', { entity });
         if (attribute && !(attribute in state.attributes)) {
-            return `Attribute "${attribute}" not found on ${entity}`;
+            return this._t('card.warning.attribute_not_found', { attribute, entity });
         }
         return '';
     }
 
     _update() {
-        const { entity, hide_button, button_text, title } = this._config;
-        const state = entity && this._hass ? this._hass.states[entity] : undefined;
-        const content = state ? this._getContent(state) : '';
+        const { entity, url, hide_button, button_text, title } = this._config;
+        const state = !url && entity && this._hass ? this._hass.states[entity] : undefined;
+        const content = this._getContent(state);
 
         const warning = this._getWarning(state);
         this._alert.textContent = warning;
         this._alert.hidden = !warning;
 
-        this._button.textContent = button_text || DEFAULT_BUTTON_TEXT;
-        this._button.hidden = Boolean(hide_button);
+        this._button.textContent = button_text || this._t('card.default_button_text');
         this._button.disabled = !content;
+        this._buttonWrapper.hidden = Boolean(hide_button);
+        this._badge.hidden = !(this._unread && content);
+        this._badge.title = this._t('card.unread');
+        if (this._unread && content) {
+            this._button.setAttribute('aria-label', `${this._button.textContent} (${this._t('card.unread')})`);
+        } else {
+            this._button.removeAttribute('aria-label');
+        }
+
         this._placeholder.hidden = !(hide_button && this._isEditing);
-        this._dialog.headerTitle = title || DEFAULT_TITLE;
+        this._placeholder.querySelector('span').textContent = this._t('card.hidden_placeholder');
+        this._dialog.headerTitle = title || this._t('card.default_title');
+        this._dismiss.textContent = this._t('card.dismiss');
 
         if (content !== this._renderedContent) {
             this._renderedContent = content;
-            this._content.innerHTML = this._renderMarkdown(content);
+            this._markdown.content = content;
         }
 
         this._currentHash = content ? hashContent(content) : null;
-        if (this._currentHash && !this._isEditing) {
-            this._maybeAutoOpen(state, this._currentHash);
+        if (this._currentHash && this._hass && this._currentHash !== this._checkedHash) {
+            this._checkedHash = this._currentHash;
+            this._refreshSeen(state, this._currentHash);
         }
     }
 
-    _renderMarkdown(content) {
-        if (!content) return '';
-        // input_text can't hold real newlines, so allow a literal "\n".
-        const text = content.replace(/\\n/g, '\n');
-        try {
-            return marked.parse(text, { breaks: true, gfm: true });
-        } catch (error) {
-            console.error('changelog-card: failed to parse markdown', error);
-            const escaped = document.createElement('div');
-            escaped.textContent = text;
-            return escaped.innerHTML.replace(/\n/g, '<br>');
-        }
-    }
-
-    // One entry per entity/attribute, so several changelog cards don't share "seen" state.
+    // One entry per source, so several changelog cards don't share "seen" state.
     get _seenKey() {
-        return `${this._config.entity}|${this._config.attribute || ''}`;
+        const { entity, attribute, url } = this._config;
+        return url ? `url:${url}` : `${entity}|${attribute || ''}`;
     }
 
     async _loadSeen() {
@@ -303,148 +326,43 @@ export class ChangeLogCard extends HTMLElement {
         }
     }
 
-    // Older versions stored a per-browser "last viewed" timestamp. Treat the
-    // current changelog as seen if it hasn't changed since then.
+    // Versions up to v0.0.4 stored a per-browser "last viewed" timestamp. Treat
+    // the current changelog as seen if it hasn't changed since then.
     _seenBeforeUpgrade(state) {
+        if (!state) return false;
         const lastViewed = parseInt(localStorage.getItem(LEGACY_LAST_VIEWED_KEY) || '0');
         return lastViewed > 0 && new Date(state.last_updated).getTime() <= lastViewed;
     }
 
-    async _maybeAutoOpen(state, hash) {
-        if (this._hasAutoOpened) return;
-        // Only check each version of the content once, not on every hass update.
-        if (hash === this._checkedHash) return;
-        this._checkedHash = hash;
-
+    // Work out whether this user has seen the current content, then show the
+    // badge or open the popup.
+    async _refreshSeen(state, hash) {
         const seen = await this._loadSeen();
-        if (!seen || seen[this._seenKey] === hash) return;
+        if (!seen || hash !== this._checkedHash) return;
 
-        if (seen[this._seenKey] === undefined && this._seenBeforeUpgrade(state)) {
+        let unread = seen[this._seenKey] !== hash;
+        if (unread && seen[this._seenKey] === undefined && this._seenBeforeUpgrade(state)) {
             await this._saveSeen(hash);
+            unread = false;
+        }
+        // The content may have changed while we were waiting.
+        if (hash !== this._checkedHash) return;
+
+        this._unread = unread;
+        if (unread && this._autoOpen && !this._isEditing && !this._hasAutoOpened) {
+            this._hasAutoOpened = true;
+            this._openDialog();
             return;
         }
-
-        // Content may have changed, the dialog opened, or editing started while we waited.
-        if (this._hasAutoOpened || this._checkedHash !== hash || this._isEditing) return;
-        this._hasAutoOpened = true;
-        this._openDialog();
+        this._update();
     }
 
     _openDialog() {
-        if (!this._currentHash) return;
+        const hash = this._currentHash;
+        if (!hash) return;
         this._dialog.open = true;
-        this._saveSeen(this._currentHash);
-    }
-}
-
-
-const EDITOR_LABELS = {
-    entity: 'Entity',
-    attribute: 'Attribute (optional)',
-    title: 'Popup title (optional)',
-    hide_button: 'Hide button',
-    button_text: 'Button text (optional)',
-};
-
-const EDITOR_HELPERS = {
-    entity: 'The entity that holds your changelog. Markdown is supported.',
-    attribute: 'Read the changelog from an attribute instead of the state. Attributes aren\'t limited to 255 characters.',
-    title: `Defaults to "${DEFAULT_TITLE}".`,
-    hide_button: 'The popup still opens automatically when the changelog changes.',
-    button_text: `Defaults to "${DEFAULT_BUTTON_TEXT}".`,
-};
-
-const OPTIONAL_TEXT_KEYS = ['attribute', 'title', 'button_text'];
-
-export class ChangelogCardEditor extends HTMLElement {
-    constructor() {
-        super();
-        this._config = {};
-        this._hass = null;
-        this._form = null;
-    }
-
-    set hass(hass) {
-        this._hass = hass;
-        if (this._form) this._form.hass = hass;
-    }
-
-    setConfig(config) {
-        this._config = { ...config };
-        this._render();
-    }
-
-    _schema(config) {
-        return [
-            { name: 'entity', required: true, selector: { entity: {} } },
-            {
-                name: 'attribute',
-                selector: { attribute: {} },
-                context: { filter_entity: 'entity' },
-            },
-            { name: 'title', selector: { text: {} } },
-            {
-                name: 'button',
-                type: 'expandable',
-                flatten: true,
-                expanded: true,
-                title: 'Button',
-                icon: 'mdi:gesture-tap-button',
-                schema: [
-                    { name: 'hide_button', selector: { boolean: {} } },
-                    ...(config.hide_button ? [] : [{ name: 'button_text', selector: { text: {} } }]),
-                ],
-            },
-        ];
-    }
-
-    async _render() {
-        if (!this._form) {
-            await this._loadHaForm();
-            if (this._form) return this._render();
-            this._form = document.createElement('ha-form');
-            this._form.computeLabel = (schema) => EDITOR_LABELS[schema.name] ?? schema.title ?? schema.name;
-            this._form.computeHelper = (schema) => EDITOR_HELPERS[schema.name];
-            this._form.addEventListener('value-changed', (event) => this._valueChanged(event));
-            this.appendChild(this._form);
-        }
-        this._form.hass = this._hass;
-        this._form.data = this._config;
-        this._form.schema = this._schema(this._config);
-    }
-
-    // ha-form is lazy-loaded by Home Assistant. Loading a built-in card's
-    // editor guarantees it's defined.
-    async _loadHaForm() {
-        if (customElements.get('ha-form')) return;
-        try {
-            const helpers = await window.loadCardHelpers();
-            const card = await helpers.createCardElement({ type: 'entity', entity: 'sun.sun' });
-            await card.constructor.getConfigElement();
-        } catch (error) {
-            console.warn('changelog-card: could not preload ha-form', error);
-        }
-        await customElements.whenDefined('ha-form');
-    }
-
-    _valueChanged(event) {
-        event.stopPropagation();
-        const config = { ...event.detail.value };
-
-        // An attribute picked for the previous entity probably doesn't exist on the new one.
-        if (config.entity !== this._config.entity && config.attribute) {
-            const state = this._hass?.states[config.entity];
-            if (!state || !(config.attribute in state.attributes)) delete config.attribute;
-        }
-        // Keep the YAML tidy: drop empty and default values.
-        OPTIONAL_TEXT_KEYS.forEach((key) => {
-            if (!config[key]) delete config[key];
-        });
-        if (!config.hide_button) delete config.hide_button;
-        if (config.hide_button) delete config.button_text;
-
-        this._config = config;
-        this._render();
-        fireEvent(this, 'config-changed', { config });
+        this._unread = false;
+        this._update();
+        this._saveSeen(hash);
     }
 }

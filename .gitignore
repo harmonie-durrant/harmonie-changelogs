@@ -4,3 +4,12 @@ node_modules/
 # Local Home Assistant dev instance: keep config, ignore runtime state
 dev/config/*
 !dev/config/configuration.yaml
+!dev/config/www/
+dev/config/www/*
+!dev/config/www/changelog.md
+
+# Claude Code instructions (local only)
+CLAUDE.md
+
+# Build output: attached to GitHub releases by .github/workflows/release.yaml
+dist/

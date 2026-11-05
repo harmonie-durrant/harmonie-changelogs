@@ -1,7 +1,15 @@
 {
+	"name": "harmonie-changelogs",
+	"version": "1.0.0",
+	"description": "A Home Assistant dashboard card that shows your changelog in a popup the first time each user opens the dashboard after it changes.",
+	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/harmonie-durrant/harmonie-changelogs.git"
+	},
+	"private": true,
 	"source": "src/index.js",
 	"module": "dist/index.js",
-	"license": "MIT",
 	"targets": {
 		"module": {
 			"includeNodeModules": true
@@ -12,13 +20,12 @@
 		"build": "parcel build",
 		"ha:up": "docker compose up -d",
 		"ha:down": "docker compose down",
-		"ha:logs": "docker compose logs -f homeassistant"
+		"ha:logs": "docker compose logs -f homeassistant",
+		"test:e2e": "node tests/e2e/run.mjs"
 	},
 	"devDependencies": {
 		"@parcel/transformer-inline-string": "^2.8.3",
-		"parcel": "^2.13.3"
-	},
-	"dependencies": {
-		"marked": "^16.3.0"
+		"parcel": "^2.13.3",
+		"puppeteer-core": "^24.43.1"
 	}
 }

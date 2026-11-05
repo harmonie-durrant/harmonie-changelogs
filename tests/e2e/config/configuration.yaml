@@ -1,0 +1,49 @@
+# Home Assistant config for the end-to-end tests (tests/e2e/run.mjs).
+# Copied to a temporary folder for every run, so each run starts fresh.
+default_config:
+
+homeassistant:
+  name: Changelog E2E
+  time_zone: Europe/Paris
+
+logger:
+  default: warning
+
+lovelace:
+  resource_mode: yaml
+  resources:
+    - url: /local/harmonie-changelogs/index.js
+      type: module
+  dashboards:
+    test-dash:
+      mode: yaml
+      filename: test-dash.yaml
+      title: Test
+      show_in_sidebar: true
+
+input_text:
+  changelog:
+    name: Changelog
+    max: 255
+    initial: "## v1.1\n- **New:** markdown support\n- Fixed popup header"
+  manual:
+    name: Manual changelog
+    max: 255
+    initial: "## Manual\n- Opened with the button"
+  xss:
+    name: XSS changelog
+    max: 255
+
+template:
+  - sensor:
+      - name: Long changelog
+        state: "v2.0"
+        attributes:
+          content: >-
+            ## v2.0\n
+            ### New\n
+            - Changelogs can now be read from an entity **attribute**, so they are no longer limited to 255 characters.\n
+            - The "seen" state is stored per Home Assistant user and syncs across devices.\n
+            ### Fixed\n
+            - The popup now shows on a browser's first visit.\n
+            - Restarting Home Assistant no longer re-opens the popup.

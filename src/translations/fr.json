@@ -1,0 +1,54 @@
+{
+	"card": {
+		"default_title": "Nouveautés",
+		"default_button_text": "Voir les nouveautés",
+		"dismiss": "Fermer",
+		"unread": "Nouveautés non lues",
+		"hidden_placeholder": "Popup des nouveautés (bouton masqué sur le tableau de bord)",
+		"warning": {
+			"no_source": "Choisissez une entité ou un fichier Markdown pour vos nouveautés dans l'éditeur de la carte.",
+			"entity_not_found": "Entité introuvable : {entity}",
+			"attribute_not_found": "Attribut « {attribute} » introuvable sur {entity}",
+			"file_error": "Impossible de charger {url} : {error}"
+		}
+	},
+	"editor": {
+		"source": {
+			"label": "Source des nouveautés",
+			"helper": "D'où provient le texte des nouveautés.",
+			"entity": "Entité",
+			"file": "Fichier Markdown"
+		},
+		"entity": {
+			"label": "Entité",
+			"helper": "L'entité qui contient vos nouveautés. Le Markdown est pris en charge."
+		},
+		"attribute": {
+			"label": "Attribut (facultatif)",
+			"helper": "Lire les nouveautés depuis un attribut plutôt que depuis l'état. Les attributs ne sont pas limités à 255 caractères."
+		},
+		"url": {
+			"label": "URL du fichier",
+			"helper": "Un fichier Markdown, par ex. /local/changelog.md pour config/www/changelog.md. Aucune limite de longueur."
+		},
+		"title": {
+			"label": "Titre de la popup (facultatif)",
+			"helper": "Par défaut : « {default} »."
+		},
+		"behaviour": {
+			"title": "Popup et bouton"
+		},
+		"hide_button": {
+			"label": "Masquer le bouton",
+			"helper": "La popup s'ouvre quand même automatiquement quand les nouveautés changent."
+		},
+		"auto_open": {
+			"label": "Ouvrir automatiquement",
+			"helper": "Ouvre la popup la première fois que chaque utilisateur charge le tableau de bord après une modification. Si désactivé, le bouton affiche un point à la place."
+		},
+		"button_text": {
+			"label": "Texte du bouton (facultatif)",
+			"helper": "Par défaut : « {default} »."
+		}
+	}
+}
