@@ -1,6 +1,7 @@
 {
 	"source": "src/index.js",
 	"module": "dist/index.js",
+	"license": "MIT",
 	"targets": {
 		"module": {
 			"includeNodeModules": true
